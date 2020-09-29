@@ -6,6 +6,28 @@ Tiny react native library only for `basicConsume` functional from RabbitMQ.
 
 ```sh
 npm install rn-tiny-rbmq
+npx pod-install
+```
+
+
+Change some lines of code to make the library work:
+```objc
+// Pods/RMQClient/RMQValues.h
+// line 54 
+// @import JKVValue;
+#import "JKVValue.h"
+
+
+// Pods/RMQClient/RMQTCPSocketTransport.h
+// line 56
+// @import CocoaAsyncSocket;
+#import "GCDAsyncSocket.h"
+
+
+// Pods/RMQClient/RMQTCPSocketConfigurator.h
+// line 55
+// @import CocoaAsyncSocket;
+#import "GCDAsyncSocket.h"
 ```
 
 ## Usage
