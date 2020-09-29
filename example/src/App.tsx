@@ -1,19 +1,38 @@
 import * as React from 'react';
-import { StyleSheet, View, Text } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import RnTinyRbmq from 'rn-tiny-rbmq';
 
 export default function App() {
-  const [result, setResult] = React.useState<number | undefined>();
-
   React.useEffect(() => {
-    RnTinyRbmq.multiply(3, 7).then(setResult);
+    const rbmq = new RnTinyRbmq({
+      host: '',
+      port: 5672,
+      virtualhost: '',
+      username: '',
+      password: '',
+      ttl: 10000,
+      ssl: false,
+    });
+    rbmq.on('connected', () => {
+      console.log('CONNECTED!');
+      rbmq.basicConsume('');
+    });
+    rbmq.on('error', () => {
+      console.log('ERROR!');
+    });
+    rbmq.on('message', (data: any) => {
+      console.log(data);
+    });
+
+    return function cleanup() {
+      rbmq.removeon('connected');
+      rbmq.removeon('error');
+      rbmq.removeon('message');
+      rbmq.close();
+    };
   }, []);
 
-  return (
-    <View style={styles.container}>
-      <Text>Result: {result}</Text>
-    </View>
-  );
+  return <View style={styles.container} />;
 }
 
 const styles = StyleSheet.create({

@@ -1,9 +1,70 @@
-import { NativeModules } from 'react-native';
+import {
+  NativeModules,
+  NativeEventEmitter,
+  EmitterSubscription,
+} from 'react-native';
+
+interface configType {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  virtualhost: string;
+  ttl: number;
+  ssl: boolean;
+}
 
 type RnTinyRbmqType = {
-  multiply(a: number, b: number): Promise<number>;
+  initialize(config: configType): void;
+  basicConsume(queue: string): void;
+  close(): void;
 };
 
-const { RnTinyRbmq } = NativeModules;
+type callbackType = {
+  [index: string]: any;
+};
 
-export default RnTinyRbmq as RnTinyRbmqType;
+const { RnTinyRbmq, RnTinyRbmqEventEmitter } = NativeModules;
+
+export default class RnTinyRabbitMq {
+  callbacks: callbackType;
+  rnTinyRbmq: RnTinyRbmqType;
+  subscriptions: EmitterSubscription;
+
+  constructor(config: configType) {
+    this.callbacks = {};
+    this.rnTinyRbmq = RnTinyRbmq;
+    const rbmqEmitter = new NativeEventEmitter(RnTinyRbmqEventEmitter);
+    this.subscriptions = rbmqEmitter.addListener(
+      'RnTinyRbmqEvent',
+      this.handleEvent
+    );
+    this.rnTinyRbmq.initialize(config);
+  }
+
+  close() {
+    this.rnTinyRbmq.close();
+  }
+
+  clear() {
+    this.subscriptions.remove();
+  }
+
+  basicConsume(queue: string) {
+    this.rnTinyRbmq.basicConsume(queue);
+  }
+
+  handleEvent = (event: (name: string, ...args: any[]) => any) => {
+    if (this.callbacks.hasOwnProperty(event.name)) {
+      this.callbacks[event.name](event);
+    }
+  };
+
+  on(event: string, callback: Function) {
+    this.callbacks[event] = callback;
+  }
+
+  removeon(event: string) {
+    delete this.callbacks[event];
+  }
+}
