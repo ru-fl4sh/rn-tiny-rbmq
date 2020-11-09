@@ -10,6 +10,7 @@ class RnTinyRbmqModule(val reactContext: ReactApplicationContext) : ReactContext
     private var channel: Channel? = null
     private var consumer: DefaultConsumer? = null
     private val consumerTags = ArrayList<String>()
+    private var factory: ConnectionFactory? = null
 
     override fun getName(): String {
         return "RnTinyRbmq"
@@ -17,20 +18,23 @@ class RnTinyRbmqModule(val reactContext: ReactApplicationContext) : ReactContext
 
     @ReactMethod
     fun initialize(config: ReadableMap) {
-      val factory = ConnectionFactory()
-      factory.host = config.getString("host")
-      factory.port = config.getInt("port")
-      factory.virtualHost = config.getString("virtualhost")
-      factory.username = config.getString("username")
-      factory.password = config.getString("password")
-      factory.isAutomaticRecoveryEnabled = true
-      factory.requestedHeartbeat = 10
+      factory = ConnectionFactory()
+      factory!!.host = config.getString("host")
+      factory!!.port = config.getInt("port")
+      factory!!.virtualHost = config.getString("virtualhost")
+      factory!!.username = config.getString("username")
+      factory!!.password = config.getString("password")
+      factory!!.isAutomaticRecoveryEnabled = true
+      factory!!.requestedHeartbeat = 10
 
       if (config.hasKey("ssl") && config.getBoolean("ssl")) {
-        factory.useSslProtocol()
+        factory!!.useSslProtocol()
       }
+    }
 
-      this.connection = factory.newConnection()
+    @ReactMethod
+    fun connect() {
+      this.connection = this.factory!!.newConnection()
       this.channel = this.connection!!.createChannel()
       this.consumer = object : DefaultConsumer(this.channel) {
         override fun handleConsumeOk(consumerTag: String?) {

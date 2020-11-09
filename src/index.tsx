@@ -16,6 +16,7 @@ interface configType {
 
 type RnTinyRbmqType = {
   initialize(config: configType): void;
+  connect(): void;
   basicConsume(queue: string): void;
   close(): void;
 };
@@ -40,6 +41,10 @@ export default class RnTinyRabbitMq {
       this.handleEvent
     );
     this.rnTinyRbmq.initialize(config);
+  }
+
+  connect() {
+    this.rnTinyRbmq.connect();
   }
 
   close() {

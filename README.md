@@ -48,10 +48,10 @@ const config = {
 };
 
 const rbmq = new RnTinyRbmq(config);
-rbmq.basicConsume('queue_name');
+rmmq.connect();
 
 rbmq.on('connected', (event) => {
-    // ...
+    rbmq.basicConsume('queue_name');
 });
 rbmq.on('error', (event) => {
     // ...
