@@ -29,6 +29,7 @@ RCT_EXPORT_METHOD(connect) {
         self.connection = [[RMQConnection alloc] initWithUri:uri channelMax:@65535 frameMax:@(RMQFrameMax) heartbeat:@10 connectTimeout:@15 readTimeout:@30 writeTimeout:@30 syncTimeout:@10 delegate:delegate delegateQueue:dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0)];
         
         [self.connection start:^{
+            self.isConnected = true;
             self.channel = [self.connection createChannel];
             [RnTinyRbmqEventEmitter emitEventWithName:@"RnTinyRbmqEvent" body:@{@"name": @"connected"}];
         }];
