@@ -9,8 +9,7 @@ class RnTinyRbmqModule(val reactContext: ReactApplicationContext) : ReactContext
     private var isConnected = false
     private var connection: Connection? = null
     private var channel: Channel? = null
-    private var consumer: DefaultConsumer? = null
-    private val consumerTags = ArrayList<String>()
+    private var consumers = ArrayList<DefaultConsumer>()
     private var factory: ConnectionFactory? = null
 
     override fun getName(): String {
@@ -25,7 +24,7 @@ class RnTinyRbmqModule(val reactContext: ReactApplicationContext) : ReactContext
       factory!!.virtualHost = config.getString("virtualhost")
       factory!!.username = config.getString("username")
       factory!!.password = config.getString("password")
-      factory!!.isAutomaticRecoveryEnabled = true
+      factory!!.isAutomaticRecoveryEnabled = false
       factory!!.requestedHeartbeat = 10
 
       if (config.hasKey("ssl") && config.getBoolean("ssl")) {
@@ -36,48 +35,54 @@ class RnTinyRbmqModule(val reactContext: ReactApplicationContext) : ReactContext
     @ReactMethod
     fun connect() {
       if (!this.isConnected) {
-        this.connection = this.factory!!.newConnection()
-        this.channel = this.connection!!.createChannel()
-        this.consumer = object : DefaultConsumer(this.channel) {
-          override fun handleConsumeOk(consumerTag: String?) {
-            super.handleConsumeOk(consumerTag)
-            if (consumerTag != null) {
-              consumerTags.add(consumerTag)
-            }
+        try {
+          this.connection = this.factory!!.newConnection()
+          this.channel = this.connection!!.createChannel()
+          this.isConnected = true
 
-            this@RnTinyRbmqModule.isConnected = true
-            val event = Arguments.createMap()
-            event.putString("name", "connected")
-            reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("RnTinyRbmqEvent", event)
-          }
+          val event = Arguments.createMap()
+          event.putString("name", "connected")
+          reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            .emit("RnTinyRbmqEvent", event)
+        } catch (e: Exception) {
+          val event = Arguments.createMap()
+          event.putString("name", "error")
+          event.putString("type", "failed connection")
+          event.putString("message", e.localizedMessage ?: e.message)
+          reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            .emit("RnTinyRbmqEvent", event)
+        }
+      }
+    }
 
+    private fun handleDisconnect() {
+      val event = Arguments.createMap()
+      event.putString("name", "error")
+      event.putString("type", "disconnected")
+      reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+        .emit("RnTinyRbmqEvent", event)
+    }
+
+    @ReactMethod
+    fun basicConsume(queue: String) {
+      if (this.isConnected) {
+        val consumer = object : DefaultConsumer(this.channel) {
           override fun handleShutdownSignal(consumerTag: String?, sig: ShutdownSignalException?) {
             super.handleShutdownSignal(consumerTag, sig)
-            this@RnTinyRbmqModule.isConnected = false
-            val event = Arguments.createMap()
-            event.putString("name", "error")
-            event.putString("type", "disconnected")
-            reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("RnTinyRbmqEvent", event)
-
-            if (consumerTag != null) {
-              consumerTags.remove(consumerTag)
-            }
+            handleDisconnect()
           }
 
           override fun handleCancel(consumerTag: String?) {
             super.handleCancel(consumerTag)
-            this@RnTinyRbmqModule.isConnected = false
-            val event = Arguments.createMap()
-            event.putString("name", "error")
-            event.putString("type", "disconnected")
-            reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("RnTinyRbmqEvent", event)
-
-            if (consumerTag != null) {
-              consumerTags.remove(consumerTag)
-            }
+            handleDisconnect()
           }
 
-          override fun handleDelivery(consumerTag: String?, envelope: Envelope?, properties: AMQP.BasicProperties?, body: ByteArray?) {
+          override fun handleDelivery(
+            consumerTag: String?,
+            envelope: Envelope?,
+            properties: AMQP.BasicProperties?,
+            body: ByteArray?
+          ) {
             val event = Arguments.createMap()
 
             if (body != null) {
@@ -90,33 +95,39 @@ class RnTinyRbmqModule(val reactContext: ReactApplicationContext) : ReactContext
                 event.putInt("delivery_tag", envelope.deliveryTag.toInt())
               }
 
-              reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("RnTinyRbmqEvent", event)
+              reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                .emit("RnTinyRbmqEvent", event)
             }
           }
         }
-      }
-    }
 
-    @ReactMethod
-    fun basicConsume(queue: String) {
-      if (this.isConnected) {
-        this.channel?.basicConsume(queue, true, this.consumer)
+        try {
+          this.channel?.basicConsume(queue, true, consumer)
+          this.consumers.add(consumer)
+        } catch (e: Exception) {
+          val event = Arguments.createMap()
+          event.putString("name", "error")
+          event.putString("type", "wrong queue")
+          event.putString("message", e.localizedMessage ?: e.message)
+          reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            .emit("RnTinyRbmqEvent", event)
+        }
       }
     }
 
     @ReactMethod
     fun close() {
       if (this.isConnected) {
-        consumerTags.forEach {
-          this.channel?.basicCancel(it)
+        consumers.forEach {
+          this.channel?.basicCancel(it.consumerTag)
         }
-        consumerTags.clear()
+        consumers.clear()
 
         this.connection?.close()
 
         this.connection = null
         this.channel = null
-        this.consumer = null
+        this.isConnected = false
       }
     }
 

@@ -20,8 +20,10 @@ export default function App() {
       console.log('CONNECTED!');
       rbmq.basicConsume('');
     });
-    rbmq.on('error', () => {
+    rbmq.on('error', (error: String) => {
       console.log('ERROR!');
+      console.log(error);
+      rbmq.close();
     });
     rbmq.on('message', (data: any) => {
       console.log(data);
