@@ -6,7 +6,6 @@ import com.rabbitmq.client.*
 
 class RnTinyRbmqModule(val reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
-    private var isConnected = false
     private var connection: Connection? = null
     private var channel: Channel? = null
     private var consumers = ArrayList<DefaultConsumer>()
@@ -14,6 +13,17 @@ class RnTinyRbmqModule(val reactContext: ReactApplicationContext) : ReactContext
 
     override fun getName(): String {
         return "RnTinyRbmq"
+    }
+
+    private fun handleDisconnect(message: Throwable?) {
+      val event = Arguments.createMap()
+      event.putString("name", "error")
+      event.putString("type", "disconnected")
+      if (message != null) {
+        event.putString("message", message.localizedMessage ?: message.message)
+      }
+      reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+        .emit("RnTinyRbmqEvent", event)
     }
 
     @ReactMethod
@@ -30,15 +40,60 @@ class RnTinyRbmqModule(val reactContext: ReactApplicationContext) : ReactContext
       if (config.hasKey("ssl") && config.getBoolean("ssl")) {
         factory!!.useSslProtocol()
       }
+      factory!!.exceptionHandler = object:ExceptionHandler {
+        override fun handleUnexpectedConnectionDriverException(p0: Connection?, p1: Throwable?) {
+          handleDisconnect(p1)
+        }
+
+        override fun handleReturnListenerException(p0: Channel?, p1: Throwable?) {
+          handleDisconnect(p1)
+        }
+
+        override fun handleFlowListenerException(p0: Channel?, p1: Throwable?) {
+          handleDisconnect(p1)
+        }
+
+        override fun handleConfirmListenerException(p0: Channel?, p1: Throwable?) {
+          handleDisconnect(p1)
+        }
+
+        override fun handleBlockedListenerException(p0: Connection?, p1: Throwable?) {
+          handleDisconnect(p1)
+        }
+
+        override fun handleConsumerException(
+          p0: Channel?,
+          p1: Throwable?,
+          p2: Consumer?,
+          p3: String?,
+          p4: String?
+        ) {
+          handleDisconnect(p1)
+        }
+
+        override fun handleConnectionRecoveryException(p0: Connection?, p1: Throwable?) {
+          handleDisconnect(p1)
+        }
+
+        override fun handleChannelRecoveryException(p0: Channel?, p1: Throwable?) {
+          handleDisconnect(p1)
+        }
+
+        override fun handleTopologyRecoveryException(
+          p0: Connection?,
+          p1: Channel?,
+          p2: TopologyRecoveryException?
+        ) {}
+
+      }
     }
 
     @ReactMethod
     fun connect() {
-      if (!this.isConnected) {
+      if (this.connection == null || (this.connection != null && !this.connection!!.isOpen)) {
         try {
           this.connection = this.factory!!.newConnection()
           this.channel = this.connection!!.createChannel()
-          this.isConnected = true
 
           val event = Arguments.createMap()
           event.putString("name", "connected")
@@ -55,26 +110,18 @@ class RnTinyRbmqModule(val reactContext: ReactApplicationContext) : ReactContext
       }
     }
 
-    private fun handleDisconnect() {
-      val event = Arguments.createMap()
-      event.putString("name", "error")
-      event.putString("type", "disconnected")
-      reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-        .emit("RnTinyRbmqEvent", event)
-    }
-
     @ReactMethod
     fun basicConsume(queue: String) {
-      if (this.isConnected) {
+      if (this.connection != null && this.connection!!.isOpen) {
         val consumer = object : DefaultConsumer(this.channel) {
           override fun handleShutdownSignal(consumerTag: String?, sig: ShutdownSignalException?) {
             super.handleShutdownSignal(consumerTag, sig)
-            handleDisconnect()
+            handleDisconnect(null)
           }
 
           override fun handleCancel(consumerTag: String?) {
             super.handleCancel(consumerTag)
-            handleDisconnect()
+            handleDisconnect(null)
           }
 
           override fun handleDelivery(
@@ -117,17 +164,20 @@ class RnTinyRbmqModule(val reactContext: ReactApplicationContext) : ReactContext
 
     @ReactMethod
     fun close() {
-      if (this.isConnected) {
+      if (this.connection != null && this.connection!!.isOpen) {
         consumers.forEach {
-          this.channel?.basicCancel(it.consumerTag)
+          try {
+            this.channel?.basicCancel(it.consumerTag)
+          } catch (e: Exception) {}
         }
         consumers.clear()
 
-        this.connection?.close()
+        if (this.connection != null && this.connection!!.isOpen) {
+          this.connection?.close()
+        }
 
         this.connection = null
         this.channel = null
-        this.isConnected = false
       }
     }
 
