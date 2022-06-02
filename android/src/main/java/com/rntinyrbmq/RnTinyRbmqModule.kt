@@ -49,8 +49,8 @@ class RnTinyRbmqModule(val reactContext: ReactApplicationContext) : ReactContext
           handleDisconnect(p1)
         }
 
-        override fun handleFlowListenerException(p0: Channel?, p1: Throwable?) {
-          handleDisconnect(p1)
+        override fun handleFlowListenerException(channel: Channel?, exception: Throwable?) {
+          handleDisconnect(exception)
         }
 
         override fun handleConfirmListenerException(p0: Channel?, p1: Throwable?) {
@@ -100,6 +100,7 @@ class RnTinyRbmqModule(val reactContext: ReactApplicationContext) : ReactContext
           reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
             .emit("RnTinyRbmqEvent", event)
         } catch (e: Exception) {
+          e.printStackTrace()
           val event = Arguments.createMap()
           event.putString("name", "error")
           event.putString("type", "failed connection")
